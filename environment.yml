@@ -1,9 +1,7 @@
 name: illusions_py3_10
 channels:
-  - defaults
   - conda-forge
-  - https://repo.anaconda.com/pkgs/main
-  - https://repo.anaconda.com/pkgs/r
+  - defaults
 dependencies:
   - ipykernel
   - matplotlib
