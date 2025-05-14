@@ -1,0 +1,18 @@
+name: illusions_py3_10
+channels:
+  - defaults
+  - conda-forge
+  - https://repo.anaconda.com/pkgs/main
+  - https://repo.anaconda.com/pkgs/r
+dependencies:
+  - ipykernel
+  - matplotlib
+  - numpy
+  - pip
+  - pygame
+  - python=3.10
+  - pip:
+      - pandas
+      - pillow
+      - pyllusion
+prefix: /Users/ahnagirshick/Applications/miniconda3/envs/illusions_py3_10
