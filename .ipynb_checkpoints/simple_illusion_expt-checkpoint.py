@@ -30,6 +30,18 @@ STANDARD_SIZE = 0.5
 DELTAS = np.linspace(-0.75, 0.75, 11) #[-0.75, -0.6, -0.45, -0.3, -0.15, 0.15, 0.3, 0.45, 0.6, 0.75]  #DELTA = 1 means top stimulus is 2x larger than bottom stimulus
 # Note PyIllusion seems to always point the arrows out on the longer stimulus, which is actually a clue to the observer that I would randomize in a real experiment
 
+def draw_fixation_cross():
+    x1 = 1
+    x2 = 10
+    plt.plot([-x1,x1],[0,0],'k-')
+    plt.plot([0,0],[-x1,x1],'k-')
+    plt.axis('equal')
+    plt.xlim([-x2,x2])
+    plt.ylim([-x2,x2])
+    plt.gca().set_aspect('equal', adjustable='box')
+    plt.axis('off')
+    plt.show()
+    
 def pil_to_pygame(pil_img):
     """Convert a PIL Image to a pygame Surface."""
     mode = pil_img.mode
