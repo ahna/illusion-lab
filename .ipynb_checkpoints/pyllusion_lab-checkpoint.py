@@ -10,6 +10,8 @@ import numpy as np
 from PIL import Image
 import random
 import os
+import time
+from datetime import datetime
 
 # Reusable utility functions
 def save_results_to_csv(results, results_filename="../expt_results/results.csv"):
@@ -171,192 +173,131 @@ def save_results_to_csv(df, results_filename):
     df.to_csv(results_filename, index=False)
     print(f"Results saved to {results_filename}")
 
-def pyllusion_constantstim_expt(illusion_type, illusion_strength=30, differences=[-1, -0.5, 0, 0.5, 1], num_trials_per_level=2, 
-                                size_min=0.5, stimulus_duration=0.8, welcome_instructions="", trial_instructions="Which looked bigger?", 
-                                output_data_path="../expt_results/", stimuli_dict={}):
+def pyllusion_constantstim_expt(illusion_type, illusion_strength=30, differences=[-1, -0.5, 0, 0.5, 1], num_trials_per_level=2, size_min=0.5,
+                                duration=0.8, output_data_path="../expt_results/", welcome_instructions="Welcome!", trial_instructions="Which looked bigger?", 
+                                stimuli_dict={}, img_scale=0.5):
     """An simple illusion perception experiment using the Method of Constanst Stimuli and a pyllusion-generated stimulus.
     The observer clicks one of two buttons on repeated trials in random order"""
 
     # make sure the illusion_type is available
     if not check_illusion_type(illusion_type):
         return
-        
+
     # setup UX
-    print(welcome_instructions) 
-    output = Output()
-    image_box = Output(layout=Layout(display='flex', justify_content='center'))
-    controls = VBox()
-    main_ui = VBox([image_box, output, controls])
-    display(main_ui) 
+    messages = Output(layout=Layout(display='flex', justify_content='center'))
+    image_box = Output(layout=Layout(display='flex', justify_content='center')) # a centered box for the illusion stimulus, which starts empty
+    controls = VBox(layout=Layout(align_items='center')) 
+    main_ui = VBox([image_box, messages, controls], layout=Layout(align_items='center')) # a centered box with the illusion, the messages and controls
+    display(main_ui)
     observer_id_input = Text(description="Observer ID:", placeholder="e.g. 001")
     start_button = Button(description="Start Experiment", button_style='success')
-    controls.children = [observer_id_input, start_button] # initial controls
+    controls.children = [observer_id_input, start_button]
+    with messages:
+        messages.clear_output(wait=True)
+        print(welcome_instructions)    
     try:
         fixation_cross = Image.open("./fixation_cross.jpg")
     except FileNotFoundError:
         with output:
             print("Error: fixation_cross.jpg not found.")
         return
-    
+
     # set up trials using method of constant stimuli
     deltas = np.random.permutation(differences * num_trials_per_level) # randomized order of stimuli
-    results_df = pd.DataFrame(columns=['trial', 'illusion_strength', 'standard', 'difference', 'response', 'RT', 'size1', 'size2', 'standard1'])
-    trial_data = {"i": 0, "start_time": None, "results": results_df, "standard1": None, "size1": None, "size2": None,}
-    observer_ID = None
-    results_filename = output_data_path + "temp.csv"
+    results_df = pd.DataFrame(columns=['trial', 'illusion_strength', 'standard', 'difference', 'response', 'RT', 'size1', 'size2', 'standard1', 'chooseComparison'])
+    trial_data = {"i": 0, "start_time": None, "results": results_df, "standard1": None, "size1": None, "size2": None}
+    results_filename = output_data_path + "temp.csv"    
+
+    def show_buttons():
+        """Show two response buttons"""        
+        # 1) Replace stimulus with fixation cross
+        with image_box:
+            clear_output(wait=True)
+            display(pil_to_ipyimage(fixation_cross, scale=img_scale)) 
+        
+        # 2) Put trial instructions into the output widget
+        with messages:
+            messages.clear_output(wait=True)
+            print(f"Trial {trial_data['i']+1}/{len(deltas)} — {trial_instructions}")
+    
+        # 3) Show the two choice buttons
+        controls.children = [VBox([top_button, bottom_button],
+                layout=Layout(align_items='center', justify_content='center')
+            )
+        ]
     
     def run_trial():
-        """function to run one trial"""
-        print("run trial")
-        i = trial_data["i"]
-        if i >= len(deltas):
-            clear_output(wait=True)
-            with output:
-                clear_output(wait=True)
+        """run one trial"""
+        i = trial_data["i"]        
+        if i >= len(deltas): # end of experiment
+            with messages:
+                messages.clear_output(wait=True)
                 print("Experiment complete. Data saved to " + results_filename)
             controls.children = []
-            print(results_filename)
             save_results_to_csv(trial_data["results"], results_filename=results_filename)
             return
             
-        delta = deltas[i]
-        #stimulus, illusion_params = render_illusion(illusion_type, illusion_strength, standard, delta)
-        stimulus_img, stimulus_params = load_prerendered_stimulus(stimuli_dict, illusion_strength=illusion_strength, difference=delta)
-        # stimulus = MullerLyer(illusion_strength=illusion_strength, size_min=size_min, difference=delta)
-#        trial_data["size1"] = stimulus_params['Size_Top']
-#        trial_data["size2"] = stimulus_params['Size_Bottom']
-#        trial_data["standard1"] = stimulus_params['Distractor_TopLeft1_x1'] > stimulus_params['Distractor_TopLeft1_x2'] # specific to ML
+        # load the pre-generated stimulus
+        stimulus_img, stimulus_params = load_prerendered_stimulus(stimuli_dict, illusion_strength=illusion_strength, difference=deltas[i])
+        trial_data["size1"] = stimulus_params['Size_Top']
+        trial_data["size2"] = stimulus_params['Size_Bottom']
+        if illusion_type == "MullerLyer":
+           trial_data["standard1"] = stimulus_params['Distractor_TopLeft1_x1'] > stimulus_params['Distractor_TopLeft1_x2'] # ML specific
 
         # Show the stimulus
-        clear_output(wait=True)
+        image_box.clear_output(wait=True)
         with image_box:
-            clear_output(wait=True)
-            display(stimulus)
-            #display(pil_to_ipyimage(img, scale=img_scale))
-            
-        # with output:
-        #     clear_output(wait=True)
-        #     display(VBox([stimulus.to_image()], layout=Layout(align_items='center')))
-
+            display(pil_to_ipyimage(stimulus_img, scale=img_scale))
+       
         trial_data["start_time"] = time.time()
-        time.sleep(stimulus_duration)
-
-        # Replace stimulus with fixation cross
-        clear_output(wait=True)
-        with output:
-            clear_output(wait=True)
-            with image_box:
-                clear_output(wait=True)
-                display(fixation_cross)
-                
-        print(f"Trial {i+1}/{len(deltas)} — {trial_instructions}")
+        time.sleep(duration)
+        show_buttons()
         trial_data["i"] += 1
-        controls.children = [VBox([top_button, bottom_button],
-                        layout=Layout(align_items='center', justify_content='center'))]
 
     def record_response(response_code):
         """Called everytime a response button is clicked"""
         rt = time.time() - trial_data["start_time"]
         i = trial_data["i"]
         results_df = trial_data["results"]
-        results_df.loc[len(results_df)] = [
-            i,
-            illusion_strength,
-            size_min,
-            deltas[i - 1],
-            response_code,
-            rt,
-            trial_data["size1"],
-            trial_data["size2"],
-            trial_data["standard1"]
-        ]
+        if illusion_type == "MullerLyer":
+            # choseTop is True if observer chose the top stimulus
+            chooseTop = np.where(response_code==1, True, False)
+            # chooseComparison is True if only ONE of standard1 and chooseTop is True, otherwise False
+            chooseComparison = np.logical_xor(trial_data["standard1"], chooseTop)
+        else:
+            chooseComparison = None
+        results_df.loc[len(results_df)] = [i, illusion_strength, size_min, deltas[i - 1], response_code, rt, trial_data["size1"], trial_data["size2"], trial_data["standard1"], chooseComparison]                
         trial_data["results"] = results_df
 
-        # Clear fixation and proceed with the next trial
-        clear_output(wait=True)
-        with output:
-            clear_output(wait=True)
+        # Clear and proceed with the next trial
+        image_box.clear_output(wait=True)
+        messages.clear_output(wait=True)
         controls.children = []
         run_trial()
 
     def on_start_clicked(b):
         """Call once, when the start button is clicked"""
+        nonlocal results_filename
         observer_id = observer_id_input.value.strip()
-        if not observer_id:
-            with output:
-                clear_output(wait=True)
+        with messages:
+            if not observer_id:
+                messages.clear_output(wait=True)
                 print("Please enter an Observer ID before starting.")
-            return
-        results_filename = output_data_path + f"{illusion_type}_{illusion_strength}_constant_stimuli_{observer_id}_{datetime.now().strftime('%Y-%m-%d-%H-%M')}_results.csv"
-        print("on_start_clicked")
+                return
+            else:
+                messages.clear_output(wait=False) # clear the welcome instructions
+        controls.children = [] # clear the start button
+        results_filename = f"{output_data_path}{illusion_type}_{illusion_strength}_constant_stimuli_{observer_id}_{datetime.now().strftime('%Y-%m-%d-%H-%M')}_results.csv"
         run_trial()
 
     # button set up and callbacks
     start_button.on_click(on_start_clicked)
-    top_button = Button(description="Top Line Longer", button_style='info')
-    bottom_button = Button(description="Bottom Line Longer", button_style='info')
+    top_button = Button(description="Top (or Left) Bigger", button_style='info', layout=Layout(width="400px"))
+    bottom_button = Button(description="Bottom (or Right) Bigger", button_style='info', layout=Layout(width="400px"))
     top_button.on_click(lambda b: record_response("1"))
     bottom_button.on_click(lambda b: record_response("2"))
 
-    return results_df
-
-
-def pyllusion_constantstim_expt_old(illusion_type, illusion_strength=30, differences=[-1,-0.5,0,0.5,1], num_trials_per_level=2, size_min=0.5, stimulus_duration=0.8, instructions="", output_data_path="../expt_results/"):
-    """An simple illusion perception experiment using the Method of Constanst Stimuli and a pyllusion-generated stimulus.
-    The observer clicks one of two buttons on repeated trials in random order"""
-    
-    # make sure the illusion_type is available
-    if not check_illusion_type(illusion_type):
-        return
-
-    # print instructions and gather observer ID
-    print(instructions) 
-    observer_ID = input("Enter observer ID as a three digit number and press enter to start: ")
-    datetime_string = datetime.now().strftime("%Y-%m-%d-%H-%M")
-    results_filename = output_data_path + illusion_type + "_" + str(illusion_strength) + "_constant_stimuli_" + str(observer_ID) + "_" + datetime_string + '_results.csv'
-
-    # expt parameters & set up
-    deltas = differences * num_trials_per_level
-    constantstimuli_results_df = pd.DataFrame(columns=['trial','illusion_strength','standard','difference','response','RT','size1','size2','standard1']) # prepare results container
-    plt.figure(figsize=(1,1))
-    try:
-        fixation_cross = Image.open("./fixation_cross.jpg")
-    except FileNotFoundError:
-        print("Error: Fixation cross file not found.")
-    
-    # run the experiment loop
-    for i, delta in enumerate(deltas, start=1):
-        # 1) generate the illusion & gather some data to save about it
-        
-        stimulus = MullerLyer(illusion_strength=illusion_strength, size_min=size_min, difference=delta)
-        size1 = stimulus.get_parameters()['Size_Top'] # the length of the line on top
-        size2 = stimulus.get_parameters()['Size_Bottom'] # the length of the line on bottom
-        standard1 = stimulus.get_parameters()['Distractor_TopLeft1_x1'] > stimulus.get_parameters()['Distractor_TopLeft1_x2'] 
-        # if standard1 is True, that means the top is the standard (and bottom is the comparison)
-        # Pyllusion's quirk is that only way to determine if it is the standard is if x1>x2, which means the arrows point inward
-
-        # 2) display it
-        clear_output(wait=True)
-        t0 = time.time()
-        display(stimulus.to_image())
-        
-        # 3) wait a standard amount of time then clear the image
-        time.sleep(stimulus_duration)
-        clear_output(wait=True)
-        display(fixation_cross)
-        
-        # 4) collect response via keyboard input & record
-        while True:
-            resp = input(f"Trial {i}/{len(deltas)} — which line looked longer? Top (1) or Bottom (2)?: ").strip()
-            if resp in ['1', '2']:
-                break
-            print("Invalid input. Please type '1' or '2'.")
-        constantstimuli_results_df.loc[len(constantstimuli_results_df)] = \
-            [i, illusion_strength, size_min, delta, resp, time.time() - t0, size1, size2, standard1]
-    
-    clear_output()
-    save_results_to_csv(constantstimuli_results_df, results_filename=results_filename) 
-    return constantstimuli_results_df, results_filename
+    return results_df, results_filename    
 
 def reformat_muller_lyer_constantstim_results(results_filename):
     """Reformat the results to indicate if the observer chose the comparison or standard stimulus.

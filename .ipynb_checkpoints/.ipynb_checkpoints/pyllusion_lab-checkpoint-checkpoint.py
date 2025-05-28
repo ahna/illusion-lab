@@ -184,10 +184,10 @@ def pyllusion_constantstim_expt(illusion_type, illusion_strength=30, differences
         return
 
     # setup UX
-    messages = Output(layout=Layout(display='flex', justify_content='center'))
+    messages = Output()
     image_box = Output(layout=Layout(display='flex', justify_content='center')) # a centered box for the illusion stimulus, which starts empty
-    controls = VBox(layout=Layout(align_items='center')) 
-    main_ui = VBox([image_box, messages, controls], layout=Layout(align_items='center')) # a centered box with the illusion, the messages and controls
+    controls = VBox() 
+    main_ui = VBox([image_box, messages, controls]) # a centered box with the illusion, the messages and controls
     display(main_ui)
     observer_id_input = Text(description="Observer ID:", placeholder="e.g. 001")
     start_button = Button(description="Start Experiment", button_style='success')
@@ -195,12 +195,6 @@ def pyllusion_constantstim_expt(illusion_type, illusion_strength=30, differences
     with messages:
         messages.clear_output(wait=True)
         print(welcome_instructions)    
-    try:
-        fixation_cross = Image.open("./fixation_cross.jpg")
-    except FileNotFoundError:
-        with output:
-            print("Error: fixation_cross.jpg not found.")
-        return
 
     # set up trials using method of constant stimuli
     deltas = np.random.permutation(differences * num_trials_per_level) # randomized order of stimuli
@@ -210,10 +204,8 @@ def pyllusion_constantstim_expt(illusion_type, illusion_strength=30, differences
 
     def show_buttons():
         """Show two response buttons"""        
-        # 1) Replace stimulus with fixation cross
-        with image_box:
-            clear_output(wait=True)
-            display(pil_to_ipyimage(fixation_cross, scale=img_scale)) 
+        # 1) Erase stimulus
+        image_box.clear_output(wait=False)
         
         # 2) Put trial instructions into the output widget
         with messages:
