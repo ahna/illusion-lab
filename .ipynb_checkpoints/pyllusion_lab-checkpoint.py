@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 import random
+import os
 
 # Reusable utility functions
 def save_results_to_csv(results, results_filename="../expt_results/results.csv"):
@@ -16,16 +17,6 @@ def save_results_to_csv(results, results_filename="../expt_results/results.csv")
     results.to_csv(results_filename, index=False, header=True)
     print(f"Saved {len(results)} rows to {results_filename}")
 
-def plot_adjustment_results(adjustment_results_df, results_fig_filename):
-    """plot summary of your results for across multiple illusion strengths (arrow angles)"""
-    adjustment_results_df.plot('arrow_angle','PSE', marker='o', linestyle='-')
-    plt.xlabel('Illusion strength (arrow angle in degrees)')
-    plt.ylabel('Extra comparison length needed\n to be perceived as same as standard')
-    plt.title('Method of Adjustment: Muller-Lyer Illusion')
-    plt.tight_layout()
-    plt.savefig(results_fig_filename) 
-    print("Saved figure to " + results_fig_filename)
-    plt.show()
 
 def pil_to_ipyimage(pil_img, scale=1.0):
     """Convert a Pillow image to an IpyImage and also optionally resize it"""
@@ -37,15 +28,83 @@ def pil_to_ipyimage(pil_img, scale=1.0):
     resized.save(buf, format='PNG')
     return IPyImage(data=buf.getvalue())
 
+
+def check_illusion_type(illusion_type):
+    """Return True if illustion_type is in the pyllusion package"""
+    avail_pyllusions = [name for name in dir(pyllusion) if name[0].isupper()]
+    if illusion_type not in avail_pyllusions:
+        print(illusion_type + " is not one of pyllusion's available illusions: ")
+        print(avail_pyllusions)
+        return False
+    else:
+        return True
+
+def render_illusion(illusion_type, illusion_strength, standard, difference):
+    """Render a pyllusion illusion, return it as a Pillow image and its parameters"""
+    illusion = eval(f"pyllusion.{illusion_type}(illusion_strength={illusion_strength}, size_min={standard}, difference={difference})")
+    return illusion.to_image(), illusion.get_parameters() 
+
+def pre_render_stimuli(illusion_type, illusion_strengths, standard, differences, 
+                       prerendered_stimuli_dir="../expt_results/pre_rendered_stimuli/"):
+    """
+    Pre-render and save stimuli for a set of illusion_strengths and set of delta values.
+
+    Parameters
+    ----------
+    illusion_type : str
+        Name of the illusion, e.g. "MullerLyer"
+    illusion_strengths : list of floats
+        Strength parameter for the illusion
+    standard : float
+        Baseline size parameter
+    differences : list of floats
+        List of difference values to render
+    prerendered_stimuli_dir : str
+        Directory in which to save PNG files
+
+    Returns
+    -------
+    stimuli_dict : dict
+        Mapping from delta -> {'image_path': str, 'params': dict}
+    """
+    os.makedirs(prerendered_stimuli_dir, exist_ok=True) # Create output directory if it doesn't exist
+    
+    stimuli_dict = {}
+    for strength in illusion_strengths:
+        stimuli_dict[strength] = {} 
+        for delta in differences:
+            print(strength, delta)
+            # Render the illusion once
+            stimulus, illusion_params = render_illusion(illusion_type, strength, standard, delta)
+            
+            # Save the image
+            filename = f"{illusion_type}_strength{strength}_std{standard}_delta{delta}.png"
+            filepath = os.path.join(prerendered_stimuli_dir, filename)
+            stimulus.save(filepath)
+            
+            # Store path and params
+            stimuli_dict[strength][delta] = {
+                "image_path": filepath,
+                "params": illusion_params
+            }    
+    print(str(len(illusion_strengths)*len(differences)) + " illusion stimuli written to " + prerendered_stimuli_dir)
+    return stimuli_dict
+
+def load_prerendered_stimulus(stimuli_dict, illusion_strength=30, difference=0):
+    """Load a pre-rendered stimulus, returns the Pillow image and the pyllusion parameters"""
+    if os.path.exists(stimuli_dict[illusion_strength][difference]["image_path"]):
+        stimulus_img = Image.open(stimuli_dict[illusion_strength][difference]["image_path"])
+        stimulus_params = stimuli_dict[illusion_strength][difference]["params"]
+        return stimulus_img, stimulus_params
+    else: 
+        return None, None
+
 def pyllusion_adjustment_expt(illusion_type, illusion_strength=30, standard=0.5, instructions="", slider_min=0.0, slider_max=1.0, img_scale=0.25):
     """An simple illusion perception experiment using the Method of Adjustment and a pyllusion-generated stimulus.
     The observer adjusts a slider until the two stimuli look the same, and then presses the Submit button"""
 
     # make sure the illusion_type is available
-    avail_pyllusions = [name for name in dir(pyllusion) if name[0].isupper()]
-    if illusion_type not in avail_pyllusions:
-        print(illusion_type + " is not one of pyllusion's available illusions: ")
-        print(avail_pyllusions)
+    if not check_illusion_type(illusion_type):
         return
         
     # Define a frame update "event handler" function that redraws the stimulus image
@@ -55,7 +114,7 @@ def pyllusion_adjustment_expt(illusion_type, illusion_strength=30, standard=0.5,
         #stimulus = eval("pyllusion." + illusion_type + "(illusion_strength=" + str(illusion_strength) + ", size_min=" + str(standard) + ", difference=" + str(delta) + ")").to_image()
         with output:
             output.clear_output(wait=True)
-            img = eval(f"pyllusion.{illusion_type}(illusion_strength={illusion_strength}, size_min={standard}, difference={delta})").to_image()
+            img, illusion_params = render_illusion(illusion_type, illusion_strength, standard, delta)
             display(pil_to_ipyimage(img, scale=img_scale))
     
     # Define the handler for the submit button 
@@ -93,3 +152,287 @@ def pyllusion_adjustment_expt(illusion_type, illusion_strength=30, standard=0.5,
     display(VBox([centered_slider, centered_output, centered_button], layout=Layout(align_items='center')))
 
     return adjustment_results
+
+def plot_adjustment_results(adjustment_results_df, results_fig_filename):
+    """plot summary of your results for across multiple illusion strengths (arrow angles)"""
+    adjustment_results_df.plot('illusion_strength','PSE', marker='o', linestyle='-')
+    plt.xlabel('Illusion strength')
+    plt.ylabel('Extra comparison size needed\n to be perceived as same as standard')
+    plt.title('Method of Adjustment')
+    plt.tight_layout()
+    plt.savefig(results_fig_filename) 
+    print("Saved figure to " + results_fig_filename)
+    plt.show()
+
+def centered_text(content):
+    display(HTML(f"<div style='text-align: center;'>{content}</div>"))
+
+def save_results_to_csv(df, results_filename):
+    df.to_csv(results_filename, index=False)
+    print(f"Results saved to {results_filename}")
+
+def pyllusion_constantstim_expt(illusion_type, illusion_strength=30, differences=[-1, -0.5, 0, 0.5, 1], num_trials_per_level=2, 
+                                size_min=0.5, stimulus_duration=0.8, welcome_instructions="", trial_instructions="Which looked bigger?", 
+                                output_data_path="../expt_results/", stimuli_dict={}):
+    """An simple illusion perception experiment using the Method of Constanst Stimuli and a pyllusion-generated stimulus.
+    The observer clicks one of two buttons on repeated trials in random order"""
+
+    # make sure the illusion_type is available
+    if not check_illusion_type(illusion_type):
+        return
+        
+    # setup UX
+    print(welcome_instructions) 
+    output = Output()
+    image_box = Output(layout=Layout(display='flex', justify_content='center'))
+    controls = VBox()
+    main_ui = VBox([image_box, output, controls])
+    display(main_ui) 
+    observer_id_input = Text(description="Observer ID:", placeholder="e.g. 001")
+    start_button = Button(description="Start Experiment", button_style='success')
+    controls.children = [observer_id_input, start_button] # initial controls
+    try:
+        fixation_cross = Image.open("./fixation_cross.jpg")
+    except FileNotFoundError:
+        with output:
+            print("Error: fixation_cross.jpg not found.")
+        return
+    
+    # set up trials using method of constant stimuli
+    deltas = np.random.permutation(differences * num_trials_per_level) # randomized order of stimuli
+    results_df = pd.DataFrame(columns=['trial', 'illusion_strength', 'standard', 'difference', 'response', 'RT', 'size1', 'size2', 'standard1'])
+    trial_data = {"i": 0, "start_time": None, "results": results_df, "standard1": None, "size1": None, "size2": None,}
+    observer_ID = None
+    results_filename = output_data_path + "temp.csv"
+    
+    def run_trial():
+        """function to run one trial"""
+        print("run trial")
+        i = trial_data["i"]
+        if i >= len(deltas):
+            clear_output(wait=True)
+            with output:
+                clear_output(wait=True)
+                print("Experiment complete. Data saved to " + results_filename)
+            controls.children = []
+            print(results_filename)
+            save_results_to_csv(trial_data["results"], results_filename=results_filename)
+            return
+            
+        delta = deltas[i]
+        #stimulus, illusion_params = render_illusion(illusion_type, illusion_strength, standard, delta)
+        stimulus_img, stimulus_params = load_prerendered_stimulus(stimuli_dict, illusion_strength=illusion_strength, difference=delta)
+        # stimulus = MullerLyer(illusion_strength=illusion_strength, size_min=size_min, difference=delta)
+#        trial_data["size1"] = stimulus_params['Size_Top']
+#        trial_data["size2"] = stimulus_params['Size_Bottom']
+#        trial_data["standard1"] = stimulus_params['Distractor_TopLeft1_x1'] > stimulus_params['Distractor_TopLeft1_x2'] # specific to ML
+
+        # Show the stimulus
+        clear_output(wait=True)
+        with image_box:
+            clear_output(wait=True)
+            display(stimulus)
+            #display(pil_to_ipyimage(img, scale=img_scale))
+            
+        # with output:
+        #     clear_output(wait=True)
+        #     display(VBox([stimulus.to_image()], layout=Layout(align_items='center')))
+
+        trial_data["start_time"] = time.time()
+        time.sleep(stimulus_duration)
+
+        # Replace stimulus with fixation cross
+        clear_output(wait=True)
+        with output:
+            clear_output(wait=True)
+            with image_box:
+                clear_output(wait=True)
+                display(fixation_cross)
+                
+        print(f"Trial {i+1}/{len(deltas)} — {trial_instructions}")
+        trial_data["i"] += 1
+        controls.children = [VBox([top_button, bottom_button],
+                        layout=Layout(align_items='center', justify_content='center'))]
+
+    def record_response(response_code):
+        """Called everytime a response button is clicked"""
+        rt = time.time() - trial_data["start_time"]
+        i = trial_data["i"]
+        results_df = trial_data["results"]
+        results_df.loc[len(results_df)] = [
+            i,
+            illusion_strength,
+            size_min,
+            deltas[i - 1],
+            response_code,
+            rt,
+            trial_data["size1"],
+            trial_data["size2"],
+            trial_data["standard1"]
+        ]
+        trial_data["results"] = results_df
+
+        # Clear fixation and proceed with the next trial
+        clear_output(wait=True)
+        with output:
+            clear_output(wait=True)
+        controls.children = []
+        run_trial()
+
+    def on_start_clicked(b):
+        """Call once, when the start button is clicked"""
+        observer_id = observer_id_input.value.strip()
+        if not observer_id:
+            with output:
+                clear_output(wait=True)
+                print("Please enter an Observer ID before starting.")
+            return
+        results_filename = output_data_path + f"{illusion_type}_{illusion_strength}_constant_stimuli_{observer_id}_{datetime.now().strftime('%Y-%m-%d-%H-%M')}_results.csv"
+        print("on_start_clicked")
+        run_trial()
+
+    # button set up and callbacks
+    start_button.on_click(on_start_clicked)
+    top_button = Button(description="Top Line Longer", button_style='info')
+    bottom_button = Button(description="Bottom Line Longer", button_style='info')
+    top_button.on_click(lambda b: record_response("1"))
+    bottom_button.on_click(lambda b: record_response("2"))
+
+    return results_df
+
+
+def pyllusion_constantstim_expt_old(illusion_type, illusion_strength=30, differences=[-1,-0.5,0,0.5,1], num_trials_per_level=2, size_min=0.5, stimulus_duration=0.8, instructions="", output_data_path="../expt_results/"):
+    """An simple illusion perception experiment using the Method of Constanst Stimuli and a pyllusion-generated stimulus.
+    The observer clicks one of two buttons on repeated trials in random order"""
+    
+    # make sure the illusion_type is available
+    if not check_illusion_type(illusion_type):
+        return
+
+    # print instructions and gather observer ID
+    print(instructions) 
+    observer_ID = input("Enter observer ID as a three digit number and press enter to start: ")
+    datetime_string = datetime.now().strftime("%Y-%m-%d-%H-%M")
+    results_filename = output_data_path + illusion_type + "_" + str(illusion_strength) + "_constant_stimuli_" + str(observer_ID) + "_" + datetime_string + '_results.csv'
+
+    # expt parameters & set up
+    deltas = differences * num_trials_per_level
+    constantstimuli_results_df = pd.DataFrame(columns=['trial','illusion_strength','standard','difference','response','RT','size1','size2','standard1']) # prepare results container
+    plt.figure(figsize=(1,1))
+    try:
+        fixation_cross = Image.open("./fixation_cross.jpg")
+    except FileNotFoundError:
+        print("Error: Fixation cross file not found.")
+    
+    # run the experiment loop
+    for i, delta in enumerate(deltas, start=1):
+        # 1) generate the illusion & gather some data to save about it
+        
+        stimulus = MullerLyer(illusion_strength=illusion_strength, size_min=size_min, difference=delta)
+        size1 = stimulus.get_parameters()['Size_Top'] # the length of the line on top
+        size2 = stimulus.get_parameters()['Size_Bottom'] # the length of the line on bottom
+        standard1 = stimulus.get_parameters()['Distractor_TopLeft1_x1'] > stimulus.get_parameters()['Distractor_TopLeft1_x2'] 
+        # if standard1 is True, that means the top is the standard (and bottom is the comparison)
+        # Pyllusion's quirk is that only way to determine if it is the standard is if x1>x2, which means the arrows point inward
+
+        # 2) display it
+        clear_output(wait=True)
+        t0 = time.time()
+        display(stimulus.to_image())
+        
+        # 3) wait a standard amount of time then clear the image
+        time.sleep(stimulus_duration)
+        clear_output(wait=True)
+        display(fixation_cross)
+        
+        # 4) collect response via keyboard input & record
+        while True:
+            resp = input(f"Trial {i}/{len(deltas)} — which line looked longer? Top (1) or Bottom (2)?: ").strip()
+            if resp in ['1', '2']:
+                break
+            print("Invalid input. Please type '1' or '2'.")
+        constantstimuli_results_df.loc[len(constantstimuli_results_df)] = \
+            [i, illusion_strength, size_min, delta, resp, time.time() - t0, size1, size2, standard1]
+    
+    clear_output()
+    save_results_to_csv(constantstimuli_results_df, results_filename=results_filename) 
+    return constantstimuli_results_df, results_filename
+
+def reformat_muller_lyer_constantstim_results(results_filename):
+    """Reformat the results to indicate if the observer chose the comparison or standard stimulus.
+    Currently this is specific to the Muller Lyer illusion"""
+    
+    # Load results from CSV
+    results = pd.read_csv(results_filename, header=0) #, dtype={'trial': np.int32, 'choice': np.int32})
+    if results.empty:
+        print("Empty file, no data to analyze.")
+        return None, None
+    
+    # create a chooseTop column to be True for choosing the top stimulus as longer, else False
+    results['chooseTop'] = np.where(results['response']==1, True, False)
+    
+    # create a comparison column which is whatever size is *not* the standard 
+    # the way PyIllusion works is that the comparison is always bigger than the standard & has the arrows pointing inwards (decreasing its apparent size)
+    results['comparison'] = np.where(results['size1'] == results['standard'][0], results['size2'], results['size1'])
+    
+    # create a delta column which is the absolute difference (the difference column is Pyllusion's difference ratio)
+    results['delta'] = results.comparison - results.standard
+    
+    # create a chooseComparison column to be True for choosing the comparison, else False
+    # chooseComparison is True if only ONE of standard1 and chooseTop is True, otherwise False
+    results['chooseComparison'] =  np.logical_xor(results['standard1'], results['chooseTop'])
+    return results
+
+def get_PSE_JND_constantstim_plot(results, results_fig_filename):
+    """Plot the results of the constant stimuli experiment, calculating the PSE and JND"""
+    
+    # Calculate the proportion of comparison choices for each delta & plot
+    props = results.groupby('delta')['chooseComparison'].mean()
+    plt.scatter(props.index.tolist(), props.values.tolist(), label="Data")
+    plt.xlim(0.0, results['delta'].max()+0.05)
+    plt.ylim(-0.05, 1.05)
+    plt.xlabel("How much longer comparison really is")
+    plt.ylabel("Fraction of trials the comparison is perceived as longer")
+    plt.title("Method of Constant Stimuli")
+    
+    # Interpolate psychometric function & estimate PSE and JND
+    fine = np.linspace(results['delta'].min(), results['delta'].max(), 200)
+    interp_props = np.interp(fine, props.index.tolist(), props.values.tolist())
+    plt.plot(fine, interp_props, '-', label="Interpolation")
+    # Estimate PSE as how much longer the comparison needs to be to be perceived as
+    # the same length as the standard on average (prop=0.5)
+    PSE = np.interp(0.5, interp_props, fine) 
+    # Estimate JND as the mean difference between the 25% and 75% points
+    d25 = np.interp(0.25, interp_props, fine) 
+    d75 = np.interp(0.75, interp_props, fine)
+    JND = (d75 - d25) / 2 # Note that the JND above the PSE and below the PSE may be different, but for simplicity we average them. 
+    
+    # Plot the PSE and JND lines
+    plt.axhline(0.5, color='gray', linestyle='--', label="PSE: Delta = {:.2f}".format(PSE))
+    plt.axvline(PSE, color='gray', linestyle='--')
+    plt.axhline(0.25, color='gray', linestyle=':', label="PSE - JND, Delta ~= {:.2f}".format(-JND))
+    plt.axvline(d25, color='gray', linestyle=':')
+    plt.axhline(0.75, color='gray', linestyle=':', label="PSE + JND, Delta ~= {:.2f}".format(JND))
+    plt.axvline(d75, color='gray', linestyle=':')
+    
+    print(f"PSE (50% point): {PSE:.2f}")
+    print(f"JND (half 25–75 spread): {JND:.2f}") 
+    plt.legend()
+    plt.tight_layout()
+
+    # save figure
+    plt.savefig(results_fig_filename) 
+    print("Saved figure to " + results_fig_filename)
+    plt.show()
+    return PSE, JND
+    
+
+def plot_PSE_stimulus(illusion_type, delta_PSE, illusion_strength_PSE=30, size_min_PSE=0.5):
+    """Plot the illusion as it appears at the Point of Subjective Equality (PSE)"""
+    plt.figure()
+    stimulus = MullerLyer(illusion_strength=illusion_strength_PSE, size_min=size_min_PSE, difference=delta_PSE)
+    plt.image(stimulus.to_image())
+    plt.title("Illusion at PSE")
+    print("The comparison size is " + str(delta_PSE) + " different than the standard size here.")
+    print("However the observer only perceives the comparison as longer than the standard 50% of the time.")
+    
