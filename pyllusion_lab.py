@@ -307,7 +307,7 @@ def reformat_muller_lyer_constantstim_results(results_filename):
     results = pd.read_csv(results_filename, header=0) #, dtype={'trial': np.int32, 'choice': np.int32})
     if results.empty:
         print("Empty file, no data to analyze.")
-        return None, None
+        return None
     
     # create a chooseTop column to be True for choosing the top stimulus as longer, else False
     results['chooseTop'] = np.where(results['response']==1, True, False)
@@ -324,29 +324,39 @@ def reformat_muller_lyer_constantstim_results(results_filename):
     results['chooseComparison'] =  np.logical_xor(results['standard1'], results['chooseTop'])
     return results
 
-def get_PSE_JND_constantstim_plot(results, results_fig_filename):
+def get_PSE_JND_constantstim_plot(results_filename, results_fig_filename):
     """Plot the results of the constant stimuli experiment, calculating the PSE and JND"""
     
+    # Load results from CSV
+    results = pd.read_csv(results_filename, header=0) #, dtype={'trial': np.int32, 'choice': np.int32})
+    if results.empty:
+        print("Empty file, no data to analyze.")
+        return None, None
+
     # Calculate the proportion of comparison choices for each delta & plot
-    props = results.groupby('delta')['chooseComparison'].mean()
+    props = results.groupby('difference')['chooseComparison'].mean()
     plt.scatter(props.index.tolist(), props.values.tolist(), label="Data")
-    plt.xlim(0.0, results['delta'].max()+0.05)
+    plt.xlim(results['difference'].min()-0.05, results['difference'].max()+0.05)
     plt.ylim(-0.05, 1.05)
-    plt.xlabel("How much longer comparison really is")
-    plt.ylabel("Fraction of trials the comparison is perceived as longer")
+    plt.xlabel("How much bigger comparison really is")
+    plt.ylabel("Fraction of trials the comparison is perceived as bigger")
     plt.title("Method of Constant Stimuli")
     
     # Interpolate psychometric function & estimate PSE and JND
-    fine = np.linspace(results['delta'].min(), results['delta'].max(), 200)
+    fine = np.linspace(results['difference'].min(), results['difference'].max(), 200)
     interp_props = np.interp(fine, props.index.tolist(), props.values.tolist())
     plt.plot(fine, interp_props, '-', label="Interpolation")
     # Estimate PSE as how much longer the comparison needs to be to be perceived as
     # the same length as the standard on average (prop=0.5)
-    PSE = np.interp(0.5, interp_props, fine) 
-    # Estimate JND as the mean difference between the 25% and 75% points
-    d25 = np.interp(0.25, interp_props, fine) 
-    d75 = np.interp(0.75, interp_props, fine)
-    JND = (d75 - d25) / 2 # Note that the JND above the PSE and below the PSE may be different, but for simplicity we average them. 
+    if interp_props[0]<interp_props[-1]:
+        PSE = np.interp(0.5, interp_props, fine) 
+        d25 = np.interp(0.25, interp_props, fine) 
+        d75 = np.interp(0.75, interp_props, fine)
+    else: # np.interp only works if the 2nd arg is in ascending order
+        PSE = np.interp(0.5, np.flip(interp_props), np.flip(fine)) 
+        d25 = np.interp(0.25, np.flip(interp_props), np.flip(fine)) 
+        d75 = np.interp(0.75, np.flip(interp_props), np.flip(fine)) 
+    JND = abs(d75 - d25) / 2  # Estimate JND as the mean difference between the 25% and 75% points        
     
     # Plot the PSE and JND lines
     plt.axhline(0.5, color='gray', linestyle='--', label="PSE: Delta = {:.2f}".format(PSE))
@@ -367,13 +377,30 @@ def get_PSE_JND_constantstim_plot(results, results_fig_filename):
     plt.show()
     return PSE, JND
     
+def plot_illusion_at_PSE_JND(illusion_type, PSE, JND, illusion_strength=30, standard=0.5):
+    """Plot three versions of the illusion: at the PSE, as well as one JND above and below"""
+    
+    illusion_JND_below_PSE, _ = render_illusion(illusion_type, illusion_strength, standard, PSE-JND)
+    illusion_PSE, _ = render_illusion(illusion_type, illusion_strength, standard, PSE)
+    illusion_JND_above_PSE, _ = render_illusion(illusion_type, illusion_strength, standard, PSE+JND)
 
-def plot_PSE_stimulus(illusion_type, delta_PSE, illusion_strength_PSE=30, size_min_PSE=0.5):
-    """Plot the illusion as it appears at the Point of Subjective Equality (PSE)"""
-    plt.figure()
-    stimulus = MullerLyer(illusion_strength=illusion_strength_PSE, size_min=size_min_PSE, difference=delta_PSE)
-    plt.image(stimulus.to_image())
-    plt.title("Illusion at PSE")
-    print("The comparison size is " + str(delta_PSE) + " different than the standard size here.")
-    print("However the observer only perceives the comparison as longer than the standard 50% of the time.")
+    print(f"{illusion_type} illusion with strength {illusion_strength} at the PSE and one JND below and above. Can you perceive the difference?")
+    
+    plt.figure(figsize=(8,4))  
+    plt.subplot(1,3,1)
+    plt.imshow(illusion_JND_below_PSE)
+    plt.axis('off')
+    plt.title("PSE - JND")
+    
+    plt.subplot(1,3,2)
+    plt.imshow(illusion_PSE)
+    plt.axis('off')
+    plt.title("PSE")
+    
+    plt.subplot(1,3,3)
+    plt.imshow(illusion_JND_above_PSE)
+    plt.axis('off')
+    plt.title("PSE + JND")
+    
+    plt.show()
     
