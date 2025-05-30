@@ -41,7 +41,7 @@ def check_illusion_type(illusion_type):
     else:
         return True
 
-def render_illusion(illusion_type, illusion_strength, standard, difference):
+def render_illusion(illusion_type, illusion_strength, standard, difference=0):
     """Render a pyllusion illusion, return it as a Pillow image and its parameters"""
     illusion = eval(f"pyllusion.{illusion_type}(illusion_strength={illusion_strength}, size_min={standard}, difference={difference})")
     return illusion.to_image(), illusion.get_parameters() 
@@ -50,7 +50,7 @@ def pre_render_stimuli(illusion_type, illusion_strengths, standard, differences,
                        prerendered_stimuli_dir="../expt_results/pre_rendered_stimuli/"):
     """
     Pre-render and save stimuli for a set of illusion_strengths and set of delta values.
-
+pyllusion_adjustment_expt
     Parameters
     ----------
     illusion_type : str
