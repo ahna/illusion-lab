@@ -203,9 +203,6 @@ def plot_adjustment_results(adjustment_results_df, results_fig_fname):
     print("Saved figure to " + results_fig_fname)
     plt.show()
 
-def centered_text(content):
-    display(HTML(f"<div style='text-align: center;'>{content}</div>"))
-
 def save_results_to_csv(df, results_fname):
     df.to_csv(results_fname, index=False)
     print(f"Results saved to {results_fname}")
