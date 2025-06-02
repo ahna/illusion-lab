@@ -243,8 +243,7 @@ def pyllusion_constantstim_expt(illusion_type, illusion_strength=30, differences
     deltas = np.random.permutation(differences * num_trials_per_level) # randomized order of stimuli
     results_df = pd.DataFrame(columns=['trial', 'illusion_strength', 'standard', 'difference', 'response', 'RT', 'size1', 'size2', 'standard1', 'chooseComparison'])
     trial_data = {"i": 0, "start_time": None, "results": results_df, "standard1": None, "size1": None, "size2": None}
-    #global results_fname 
-    #results_fname= "" #output_data_path + "temp.csv"    
+    results_fname= ""   
 
     def show_buttons():
         """Show two response buttons"""        
@@ -275,7 +274,7 @@ def pyllusion_constantstim_expt(illusion_type, illusion_strength=30, differences
                 print("Experiment complete. Data saved to " + results_fname)
             controls.children = []
             save_results_to_csv(trial_data["results"], results_fname=results_fname)
-            return
+            return 
             
         # load the pre-generated stimulus & parameters
         stimulus_img, stimulus_params = load_prerendered_stimulus(stimuli_df, illusion_type, illusion_strength=illusion_strength, difference=deltas[i], standard=standard)
@@ -329,6 +328,7 @@ def pyllusion_constantstim_expt(illusion_type, illusion_strength=30, differences
         results_fname = f"{output_data_path}{illusion_type}_{illusion_strength}_constant_stimuli_{observer_id}_{datetime.now().strftime('%Y-%m-%d-%H-%M')}_results.csv"
         run_trial()
 
+
     # button set up and callbacks
     start_button.on_click(on_start_clicked)
     top_button = Button(description="Left / Top Bigger", button_style='info', layout=Layout(width="400px"))
@@ -336,35 +336,18 @@ def pyllusion_constantstim_expt(illusion_type, illusion_strength=30, differences
     top_button.on_click(lambda b: record_response("1"))
     bottom_button.on_click(lambda b: record_response("2"))
 
-    return results_df, results_fname
+    def get_fname():
+        nonlocal results_fname
+        return results_fname
 
-# def reformat_muller_lyer_constantstim_results(results_fname):
-#     """Reformat the results to indicate if the observer chose the comparison or standard stimulus.
-#     Currently this is specific to the Muller Lyer illusion"""
-    
-#     # Load results from CSV
-#     results = pd.read_csv(results_fname, header=0) #, dtype={'trial': np.int32, 'choice': np.int32})
-#     if results.empty:
-#         print("Empty file, no data to analyze.")
-#         return None
-    
-#     # create a chooseTop column to be True for choosing the top stimulus as longer, else False
-#     results['chooseTop'] = np.where(results['response']==1, True, False)
-    
-#     # create a comparison column which is whatever size is *not* the standard 
-#     # the way PyIllusion works is that the comparison is always bigger than the standard & has the arrows pointing inwards (decreasing its apparent size)
-#     results['comparison'] = np.where(results['size1'] == results['standard'][0], results['size2'], results['size1'])
-    
-#     # create a delta column which is the absolute difference (the difference column is Pyllusion's difference ratio)
-#     results['delta'] = results.comparison - results.standard
-    
-#     # create a chooseComparison column to be True for choosing the comparison, else False
-#     # chooseComparison is True if only ONE of standard1 and chooseTop is True, otherwise False
-#     results['chooseComparison'] =  np.logical_xor(results['standard1'], results['chooseTop'])
-#     return results
+    return results_df, get_fname
 
-def get_PSE_JND_constantstim_plot(constantstimuli_results_df, results_fig_fname):
+
+def get_PSE_JND_constantstim_plot(results_fname):
     """Plot the results of the constant stimuli experiment, calculating the PSE and JND"""
+    # load data
+    constantstimuli_results_df = pd.read_csv(results_fname)
+    results_fig_fname = results_fname.rstrip('_results.csv') + '.jpg'
     
     # Calculate the proportion of comparison choices for each delta & plot
     props = constantstimuli_results_df.groupby('difference')['chooseComparison'].mean()
@@ -417,9 +400,9 @@ def plot_illusion_at_PSE_JND(illusion_type, PSE, JND, illusion_strength=30, stan
     illusion_PSE, _ = render_illusion(illusion_type, illusion_strength, standard, PSE)
     illusion_JND_above_PSE, _ = render_illusion(illusion_type, illusion_strength, standard, PSE+JND)
 
-    print(f"{illusion_type} illusion with strength {illusion_strength} at the PSE and one JND below and above. Can you perceive the difference?")
+    print(f"{illusion_type} illusion with strength {illusion_strength} at the PSE and one JND below and above. Can you perceive the difference? Probably not easily.")
     
-    plt.figure(figsize=(8,4))  
+    plt.figure(figsize=(12,8))  
     plt.subplot(1,3,1)
     plt.imshow(illusion_JND_below_PSE)
     plt.axis('off')
