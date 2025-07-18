@@ -372,7 +372,7 @@ def get_PSE_JND_constantstim_plot(results_fname):
     JND = abs(d75 - d25) / 2  # Estimate JND as the mean difference between the 25% and 75% points        
     
     # Plot the PSE and JND lines
-    plt.axhline(0.5, color='gray', linestyle='--', label="PSE: Delta = {:.2f}".format(PSE))
+    plt.axhline(0.5, color='gray', linestyle='--', label="PSE: {:.2f}".format(PSE))
     plt.axvline(PSE, color='gray', linestyle='--')
     plt.axhline(0.25, color='gray', linestyle=':', label="PSE - JND, Delta ~= {:.2f}".format(-JND))
     plt.axvline(d25, color='gray', linestyle=':')
