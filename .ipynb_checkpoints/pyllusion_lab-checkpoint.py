@@ -192,12 +192,12 @@ def pyllusion_adjustment_expt(illusion_type, illusion_strength=30, standard=0.5,
 
     return adjustment_results
 
-def plot_adjustment_results(adjustment_results_df, results_fig_fname):
+def plot_adjustment_results(adjustment_results_df, observer_ID, datetime_string, results_fig_fname):
     """plot summary of your results for across multiple illusion strengths (arrow angles)"""
     adjustment_results_df.plot('illusion_strength','PSE', marker='o', linestyle='-')
     plt.xlabel('Illusion strength')
     plt.ylabel('Extra comparison size needed\n to be perceived as same as standard')
-    plt.title('Method of Adjustment')
+    plt.title(f"Method of Adjustment {observer_ID} {datetime_string}")
     plt.tight_layout()
     plt.savefig(results_fig_fname) 
     print("Saved figure to " + results_fig_fname)
@@ -340,7 +340,7 @@ def pyllusion_constantstim_expt(illusion_type, illusion_strength=30, differences
     return results_df, get_fname
 
 
-def get_PSE_JND_constantstim_plot(results_fname):
+def get_PSE_JND_constantstim_plot(observer_ID, datetime_string, results_fname):
     """Plot the results of the constant stimuli experiment, calculating the PSE and JND"""
     # load data
     constantstimuli_results_df = pd.read_csv(results_fname)
@@ -353,7 +353,7 @@ def get_PSE_JND_constantstim_plot(results_fname):
     plt.ylim(-0.05, 1.05)
     plt.xlabel("How much bigger comparison really is")
     plt.ylabel("Fraction of trials the comparison is perceived as bigger")
-    plt.title("Method of Constant Stimuli")
+    plt.title(f"Method of Constant Stimuli {observer_ID} {datetime_string}")
     
     # Interpolate psychometric function & estimate PSE and JND
     fine = np.linspace(constantstimuli_results_df['difference'].min(), constantstimuli_results_df['difference'].max(), 200)
